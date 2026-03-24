@@ -1,0 +1,68 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+  repository_dispatch:
+    types: [contact_form]
+
+jobs:
+
+  send-email:
+    if: github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          to: ${{ secrets.MAIL_TO }}
+          from: ${{ secrets.MAIL_USERNAME }}
+          subject: "[${{ github.event.client_payload.type }}] ${{ github.event.client_payload.subject }}"
+          body: |
+            Type:    ${{ github.event.client_payload.type }}
+            Name:    ${{ github.event.client_payload.name }}
+            From:    ${{ github.event.client_payload.email }}
+            Subject: ${{ github.event.client_payload.subject }}
+            Request: ${{ github.event.client_payload.reqtype }}
+            Message: ${{ github.event.client_payload.message }}
+            ---
+            Sent from [@]Creators Privacy Policy page
+
+  deploy:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Inject secrets
+        run: |
+          sed -i "s|%%GH_TOKEN%%|${{ secrets.GH_PAT }}|g" index.html
+          sed -i "s|%%GH_REPO%%|${{ github.repository }}|g" index.html
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy
+        id: deploy
+        uses: actions/deploy-pages@v4
